@@ -39,6 +39,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   String? _username;
   List<dynamic> familyWiseData = [];
+  List<dynamic> familyWiseTodayData = [];
+  List<dynamic> familyWiseMonthData = [];
 
   @override
   void initState() {
@@ -52,6 +54,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
     // Fetch today's data
     final today = DateTime.now();
     getDateWise();
+  }
+
+  String _todayDate() {
+    return DateFormat('yyyy-MM-dd').format(DateTime.now());
   }
 
   Future<int?> getUserId() async {
@@ -337,6 +343,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
     } catch (e) {}
   }
 
+  String _currentMonthFromDate() {
+    final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+    return DateFormat('yyyy-MM-dd').format(firstDayOfMonth);
+  }
+
+  String _currentMonthToDate() {
+    final now = DateTime.now();
+    return DateFormat('yyyy-MM-dd').format(now);
+  }
+
   Future<void> fetchCallSummaryByFamily() async {
     try {
       var token = await getToken();
@@ -350,15 +367,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
         },
       );
 
-      print("Family-wise response.statusCode: ${response.statusCode}");
-      print("Family-wise response.body: ${response.body}");
-
       if (response.statusCode == 200) {
         final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
-        final List<dynamic> data = jsonResponse['data'] ?? [];
 
         setState(() {
-          familyWiseData = data;
+          // ✅ TODAY DATA
+          familyWiseTodayData = jsonResponse['today'] ?? [];
+
+          // ✅ CURRENT MONTH DATA
+          familyWiseMonthData = jsonResponse['this_month'] ?? [];
         });
       }
     } catch (e) {
@@ -836,23 +853,31 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
             ),
             const SizedBox(height: 25),
-            _buildSectionTitle("Family Wise Summary"),
+            _buildSectionTitle(
+              "Family Wise Summary - ${DateFormat('MMMM yyyy').format(DateTime.now())}",
+            ),
             const SizedBox(height: 10),
 
             Column(
-              children: familyWiseData.map((item) {
+              children: familyWiseMonthData.map((item) {
                 return GestureDetector(
                   onTap: () {
+                    final fromDate = _currentMonthFromDate();
+                    final toDate = _currentMonthToDate();
+
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => FamilyUserWisePage(
                           familyId: item['created_by__family__id'],
                           familyName: item['created_by__family__name'],
+                          fromDate: fromDate,
+                          toDate: toDate,
                         ),
                       ),
                     );
                   },
+
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 16),
                     padding: const EdgeInsets.all(14),
@@ -921,9 +946,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 ],
                                 values: [
                                   formatDurationSmart(
-                                    item['productive_duration'],
+                                    item['productive_duration'] ?? 0,
                                   ),
-                                  formatDurationSmart(item['active_duration']),
+                                  formatDurationSmart(
+                                    item['active_duration'] ?? 0,
+                                  ),
+
                                   "₹ ${(item['productive_amount'] ?? 0).toStringAsFixed(0)}",
                                 ],
                                 highlightLast: true,
@@ -939,6 +967,121 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
 
             SizedBox(height: 30),
+
+            _buildSectionTitle(
+              "Family Wise Summary - ${DateFormat('dd MMMM yyyy').format(DateTime.now())}",
+            ),
+
+            const SizedBox(height: 10),
+
+            Column(
+              children: familyWiseTodayData.map((item) {
+                return GestureDetector(
+                  onTap: () {
+                    final today = _todayDate();
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FamilyUserWisePage(
+                          familyId: item['created_by__family__id'],
+                          familyName: item['created_by__family__name'],
+                          fromDate: today,
+                          toDate: today,
+                        ),
+                      ),
+                    );
+                  },
+
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF101010),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        /// 🔹 FAMILY NAME ROW (UNCHANGED)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item['created_by__family__name']
+                                    .toString()
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  color: Color.fromARGB(255, 32, 248, 216),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              size: 14,
+                              color: const Color.fromARGB(255, 26, 164, 143),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        /// 🔹 TABLE GRID (ROWS + COLUMNS)
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.white24),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            children: [
+                              _familyGridRow(
+                                titles: const [
+                                  "Productive Calls",
+                                  "Active Calls",
+                                  "Total Calls",
+                                ],
+                                values: [
+                                  "${item['productive_calls']}",
+                                  "${item['active_calls']}",
+                                  "${item['total_calls']}",
+                                ],
+                              ),
+
+                              const Divider(height: 1, color: Colors.white24),
+
+                              _familyGridRow(
+                                titles: const [
+                                  "Prod Duration",
+                                  "Active Duration",
+                                  "Total Amount",
+                                ],
+                                values: [
+                                  formatDurationSmart(
+                                    item['productive_duration'] ?? 0,
+                                  ),
+                                  formatDurationSmart(
+                                    item['active_duration'] ?? 0,
+                                  ),
+
+                                  "₹ ${(item['productive_amount'] ?? 0).toStringAsFixed(0)}",
+                                ],
+                                highlightLast: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+
+            SizedBox(height: 20),
             // 🟢 STATE WISE SUMMARY
             _buildSectionTitle("State Wise Summary (Top 3)"),
             const SizedBox(height: 10),
