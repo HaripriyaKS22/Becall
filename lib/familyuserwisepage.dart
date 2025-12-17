@@ -4,20 +4,27 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:becall2/api.dart';
+import 'package:intl/intl.dart';
+
 
 class FamilyUserWisePage extends StatefulWidget {
   final int familyId;
   final String familyName;
+  final String fromDate;
+  final String toDate;
 
   const FamilyUserWisePage({
     super.key,
     required this.familyId,
     required this.familyName,
+    required this.fromDate,
+    required this.toDate,
   });
 
   @override
   State<FamilyUserWisePage> createState() => _FamilyUserWisePageState();
 }
+
 
 class _FamilyUserWisePageState extends State<FamilyUserWisePage> {
   List<dynamic> userWiseFamilyData = [];
@@ -31,58 +38,85 @@ class _FamilyUserWisePageState extends State<FamilyUserWisePage> {
   int gtTotalDuration = 0;
 
   double gtAmount = 0.0;
+  late String _fromDate;
+late String _toDate;
 
-  @override
-  void initState() {
-    super.initState();
-    fetchUserWiseCallReportByFamily(widget.familyId);
-  }
+
+ @override
+void initState() {
+  super.initState();
+  _fromDate = widget.fromDate;
+  _toDate = widget.toDate;
+  fetchUserWiseCallReportByFamily();
+}
+
 
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
   }
 
-  Future<void> fetchUserWiseCallReportByFamily(int familyId) async {
-    try {
-      final token = await getToken();
+  
+Future<void> fetchUserWiseCallReportByFamily() async {
+  try {
+    final token = await getToken();
 
-      final url = Uri.parse(
-        "$api/api/call/reports/family/$familyId/user-wise-call/report/",
-      );
+    final url = Uri.parse(
+      "$api/api/call/reports/family/${widget.familyId}/user-wise-call/report/$_fromDate/$_toDate/",
+    );
 
-      final response = await http.get(
-        url,
-        headers: {
-          "Authorization": "Bearer $token",
-          "Content-Type": "application/json",
-        },
-      );
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+    );
 
-      if (response.statusCode == 200) {
-        final jsonResponse = jsonDecode(response.body);
-        final List<dynamic> data = jsonResponse['data'] ?? [];
+    if (response.statusCode == 200) {
+      final jsonResponse = jsonDecode(response.body);
+      final List<dynamic> data = jsonResponse['data'] ?? [];
 
-        setState(() {
-          userWiseFamilyData = data;
-          isLoading = false;
-        });
-        _computeTotals();
-      } else {
-        setState(() {
-          userWiseFamilyData = [];
-          isLoading = false;
-        });
-        _computeTotals();
-      }
-    } catch (e) {
+      setState(() {
+        userWiseFamilyData = data;
+        isLoading = false;
+      });
+      _computeTotals();
+    } else {
       setState(() {
         userWiseFamilyData = [];
         isLoading = false;
       });
-      _computeTotals();
     }
+  } catch (e) {
+    setState(() {
+      userWiseFamilyData = [];
+      isLoading = false;
+    });
   }
+}
+Future<void> _pickDateRange() async {
+  final DateTimeRange? picked = await showDateRangePicker(
+    context: context,
+    firstDate: DateTime(2023),
+    lastDate: DateTime.now(),
+    initialDateRange: DateTimeRange(
+      start: DateTime.parse(_fromDate),
+      end: DateTime.parse(_toDate),
+    ),
+  );
+
+  if (picked != null) {
+    setState(() {
+      _fromDate = DateFormat('yyyy-MM-dd').format(picked.start);
+      _toDate = DateFormat('yyyy-MM-dd').format(picked.end);
+      isLoading = true;
+    });
+
+    fetchUserWiseCallReportByFamily();
+  }
+}
+
 
   void _computeTotals() {
     int totalProductive = 0;
@@ -142,18 +176,37 @@ class _FamilyUserWisePageState extends State<FamilyUserWisePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 26, 164, 143),
-        title: Text(
-          "${widget.familyName.toUpperCase()} SUMMARY",
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-            letterSpacing: 1,
-          ),
+     appBar: AppBar(
+  backgroundColor: const Color.fromARGB(255, 26, 164, 143),
+  title: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        "${widget.familyName.toUpperCase()} SUMMARY",
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+          letterSpacing: 1,
         ),
       ),
+      Text(
+        "$_fromDate  →  $_toDate",
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 11,
+        ),
+      ),
+    ],
+  ),
+  actions: [
+    IconButton(
+      icon: const Icon(Icons.calendar_month, color: Colors.white),
+      onPressed: _pickDateRange,
+    ),
+  ],
+),
+
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : userWiseFamilyData.isEmpty
